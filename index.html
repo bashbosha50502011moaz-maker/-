@@ -1,0 +1,348 @@
+
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>رفيق الدراسة</title>
+
+<style>
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 20px 12px;
+  font-family: Arial, sans-serif;
+  background: #edf3ff;
+  color: #24324a;
+}
+
+main {
+  max-width: 760px;
+  margin: auto;
+}
+
+header {
+  background: #285bc5;
+  color: white;
+  padding: 24px;
+  border-radius: 18px;
+  text-align: center;
+}
+
+section {
+  background: white;
+  padding: 18px;
+  margin-top: 18px;
+  border-radius: 15px;
+  box-shadow: 0 3px 12px #0000000b;
+}
+
+h2 { color: #285bc5; }
+
+input, select, button {
+  width: 100%;
+  padding: 12px;
+  margin: 6px 0;
+  border: 1px solid #d3dcec;
+  border-radius: 8px;
+  font-size: 16px;
+}
+
+button {
+  background: #285bc5;
+  color: white;
+  border: none;
+  cursor: pointer;
+}
+
+.delete { background: #c23d48; }
+.complete { background: #238454; }
+
+.entry {
+  background: #f0f5ff;
+  padding: 12px;
+  border-radius: 10px;
+  margin: 10px 0;
+  overflow-wrap: anywhere;
+}
+
+.entry button { margin-top: 8px; }
+
+.done {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+
+.day-title {
+  background: #e1ebff;
+  padding: 10px;
+  border-radius: 8px;
+  margin-top: 15px;
+}
+
+.small {
+  color: #58657a;
+  font-size: 14px;
+}
+
+@media (min-width: 520px) {
+  .fields {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+}
+</style>
+</head>
+
+<body>
+<main>
+
+<header>
+  <h1>📚 رفيق الدراسة</h1>
+  <p>نظّم حصصك وواجباتك وحقق أهدافك!</p>
+</header>
+
+<section>
+  <h2>📅 إضافة حصة للجدول</h2>
+
+  <form id="scheduleForm">
+    <input id="subject"
+      placeholder="اسم المادة: رياضيات مثلاً"
+      maxlength="80" required>
+
+    <div class="fields">
+      <select id="day" required>
+        <option value="الأحد">الأحد</option>
+        <option value="الإثنين">الإثنين</option>
+        <option value="الثلاثاء">الثلاثاء</option>
+        <option value="الأربعاء">الأربعاء</option>
+        <option value="الخميس">الخميس</option>
+        <option value="الجمعة">الجمعة</option>
+        <option value="السبت">السبت</option>
+      </select>
+
+      <input id="start" type="time"
+        aria-label="وقت بداية الحصة" required>
+
+      <input id="end" type="time"
+        aria-label="وقت نهاية الحصة" required>
+    </div>
+
+    <input id="room"
+      placeholder="اسم المدرس أو الفصل (اختياري)"
+      maxlength="80">
+
+    <button type="submit">➕ إضافة الحصة</button>
+  </form>
+
+  <p class="small">يمكنك إضافة أكثر من حصة في اليوم نفسه.</p>
+</section>
+
+<section>
+  <h2>🗓️ جدولي الأسبوعي</h2>
+  <div id="scheduleList"></div>
+</section>
+
+<section>
+  <h2>📝 واجباتي المدرسية</h2>
+
+  <form id="taskForm">
+    <input id="taskInput"
+      placeholder="اكتب اسم الواجب"
+      maxlength="120" required>
+    <button type="submit">➕ إضافة واجب</button>
+  </form>
+
+  <p id="taskStats"></p>
+  <div id="taskList"></div>
+</section>
+
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+
+function load(key) {
+  try {
+    const value = JSON.parse(localStorage.getItem(key) || "[]");
+    return Array.isArray(value) ? value : [];
+  } catch {
+    return [];
+  }
+}
+
+let schedule = load("rafiqSchedule").filter(x =>
+  x && typeof x.id === "string" &&
+  typeof x.subject === "string" &&
+  typeof x.day === "string" &&
+  typeof x.start === "string" &&
+  typeof x.end === "string"
+);
+
+let tasks = load("rafiqTasks").filter(x =>
+  x && typeof x.name === "string" &&
+  typeof x.done === "boolean"
+);
+
+function save(key, data) {
+  try {
+    localStorage.setItem(key, JSON.stringify(data));
+    return true;
+  } catch {
+    alert("تعذر حفظ البيانات. تحقق من مساحة المتصفح وإعداداته.");
+    return false;
+  }
+}
+
+const days = [
+  "الأحد", "الإثنين", "الثلاثاء", "الأربعاء",
+  "الخميس", "الجمعة", "السبت"
+];
+
+function makeButton(text, className, action) {
+  const b = document.createElement("button");
+  b.textContent = text;
+  b.className = className;
+  b.type = "button";
+  b.addEventListener("click", action);
+  return b;
+}
+
+function renderSchedule() {
+  const root = $("scheduleList");
+  root.replaceChildren();
+
+  days.forEach(day => {
+    const lessons = schedule
+      .filter(x => x.day === day)
+      .sort((a, b) => a.start.localeCompare(b.start));
+
+    const heading = document.createElement("h3");
+    heading.className = "day-title";
+    heading.textContent = day;
+    root.appendChild(heading);
+
+    if (lessons.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "small";
+      empty.textContent = "لا توجد حصص مسجلة.";
+      root.appendChild(empty);
+    }
+
+    lessons.forEach(lesson => {
+      const card = document.createElement("div");
+      card.className = "entry";
+
+      const title = document.createElement("strong");
+      title.textContent = lesson.subject;
+
+      const time = document.createElement("p");
+      time.textContent = lesson.start + " - " + lesson.end;
+
+      card.append(title, time);
+
+      if (lesson.room) {
+        const detail = document.createElement("p");
+        detail.className = "small";
+        detail.textContent = lesson.room;
+        card.appendChild(detail);
+      }
+
+      card.appendChild(makeButton("🗑️ حذف الحصة", "delete", () => {
+        schedule = schedule.filter(x => x.id !== lesson.id);
+        if (save("rafiqSchedule", schedule)) renderSchedule();
+      }));
+
+      root.appendChild(card);
+    });
+  });
+}
+
+$("scheduleForm").addEventListener("submit", event => {
+  event.preventDefault();
+
+  const subject = $("subject").value.trim();
+  const start = $("start").value;
+  const end = $("end").value;
+
+  if (!subject || !start || !end) return;
+
+  if (end <= start) {
+    alert("وقت نهاية الحصة يجب أن يكون بعد وقت بدايتها.");
+    return;
+  }
+
+  schedule.push({
+    id: Date.now().toString() + Math.random().toString(36).slice(2),
+    subject,
+    day: $("day").value,
+    start,
+    end,
+    room: $("room").value.trim()
+  });
+
+  if (save("rafiqSchedule", schedule)) {
+    event.target.reset();
+    renderSchedule();
+  }
+});
+
+function renderTasks() {
+  const root = $("taskList");
+  root.replaceChildren();
+
+  tasks.forEach(task => {
+    const card = document.createElement("div");
+    card.className = "entry";
+
+    const label = document.createElement("span");
+    label.textContent = task.name;
+    if (task.done) label.className = "done";
+
+    card.appendChild(label);
+
+    card.appendChild(makeButton(
+      task.done ? "إلغاء الإنجاز" : "✅ تم الإنجاز",
+      "complete",
+      () => {
+        task.done = !task.done;
+        if (save("rafiqTasks", tasks)) renderTasks();
+      }
+    ));
+
+    card.appendChild(makeButton("🗑️ حذف الواجب", "delete", () => {
+      tasks = tasks.filter(x => x !== task);
+      if (save("rafiqTasks", tasks)) renderTasks();
+    }));
+
+    root.appendChild(card);
+  });
+
+  const completed = tasks.filter(x => x.done).length;
+  $("taskStats").textContent =
+    "إجمالي الواجبات: " + tasks.length +
+    " | المكتمل: " + completed;
+}
+
+$("taskForm").addEventListener("submit", event => {
+  event.preventDefault();
+
+  const name = $("taskInput").value.trim();
+  if (!name) return;
+
+  tasks.push({ name, done: false });
+
+  if (save("rafiqTasks", tasks)) {
+    $("taskInput").value = "";
+    renderTasks();
+  }
+});
+
+renderSchedule();
+renderTasks();
+</script>
+
+</body>
+</html>
